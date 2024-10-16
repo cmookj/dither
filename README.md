@@ -1,5 +1,10 @@
 # Image Dithering
 
+Dither means adding white noise to (a digital recording) to reduce distortion 
+of low-amplitude signals.  In digital image, it is an intentional addition of 
+noise to randomize quantization error, to prevent large-scale patterns, e.g., 
+color bandings.
+
 ## Basic Principle
 
 Dithering using error diffusion pushes (adds) the residual quantization error 
