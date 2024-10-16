@@ -25,11 +25,14 @@ dither at the cost of lower performance in almost saturated region.
 This results in increased contrast and may be more desirable visually.
 
 ## Comparison 
-Original image (from Internet)
+Original image (from Internet):
+
 ![](david.jpg)
 
 Floyd-Steinberg dithering:
+
 ![](floyd-steinberg.jpg)
 
 Atkinson dithering:
+
 ![](atkinson.jpg)
