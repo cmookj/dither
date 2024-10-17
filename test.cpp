@@ -2,83 +2,67 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
 
-enum class dither_t { floyd_steinberg, atkinson, min_average_error };
+int8_t
+update_and_diff_closest_palette_color (cv::Mat& img, int i, int j) {
+  auto current = img.at<uchar> (i, j);
+  auto update  = (current > 127 ? 255 : 0);
+
+  img.at<uchar> (i, j) = update;
+  return int8_t (current) - int8_t (update);
+}
+
+using kernel_t = void (*) (cv::Mat&, int, int, double);
+
+kernel_t kernel_floyd_steinberg = [] (cv::Mat& img, int i, int j, double diff) {
+  auto error_diffused = diff / 16.;
+
+  img.at<uchar> (i, j + 1)     = img.at<uchar> (i, j + 1) + error_diffused * 7.;
+  img.at<uchar> (i + 1, j - 1) = img.at<uchar> (i + 1, j - 1) + error_diffused * 3.;
+  img.at<uchar> (i + 1, j)     = img.at<uchar> (i + 1, j) + error_diffused * 5.;
+  img.at<uchar> (i + 1, j + 1) = img.at<uchar> (i + 1, j + 1) + error_diffused;
+};
+
+kernel_t kernel_atkinson = [] (cv::Mat& img, int i, int j, double diff) {
+  auto error_diffused = diff / 8.;
+
+  img.at<uchar> (i, j + 1) = img.at<uchar> (i, j + 1) + error_diffused;
+  img.at<uchar> (i, j + 2) = img.at<uchar> (i, j + 2) + error_diffused;
+
+  img.at<uchar> (i + 1, j - 1) = img.at<uchar> (i + 1, j - 1) + error_diffused;
+  img.at<uchar> (i + 1, j)     = img.at<uchar> (i + 1, j) + error_diffused;
+  img.at<uchar> (i + 1, j + 1) = img.at<uchar> (i + 1, j + 1) + error_diffused;
+
+  img.at<uchar> (i + 2, j) = img.at<uchar> (i + 2, j) + error_diffused;
+};
+
+kernel_t kernel_min_average_error = [] (cv::Mat& img, int i, int j, double diff) {
+  auto error_diffused = diff / 48.;
+
+  img.at<uchar> (i, j + 1) = img.at<uchar> (i, j + 1) + error_diffused * 7.;
+  img.at<uchar> (i, j + 2) = img.at<uchar> (i, j + 2) + error_diffused * 5.;
+
+  img.at<uchar> (i + 1, j - 2) = img.at<uchar> (i + 1, j - 2) + error_diffused * 3.;
+  img.at<uchar> (i + 1, j - 1) = img.at<uchar> (i + 1, j - 1) + error_diffused * 5.;
+  img.at<uchar> (i + 1, j)     = img.at<uchar> (i + 1, j) + error_diffused * 7.;
+  img.at<uchar> (i + 1, j + 1) = img.at<uchar> (i + 1, j + 1) + error_diffused * 5.;
+  img.at<uchar> (i + 1, j + 2) = img.at<uchar> (i + 1, j + 2) + error_diffused * 3.;
+
+  img.at<uchar> (i + 2, j - 2) = img.at<uchar> (i + 2, j - 2) + error_diffused * 1.;
+  img.at<uchar> (i + 2, j - 1) = img.at<uchar> (i + 2, j - 1) + error_diffused * 3.;
+  img.at<uchar> (i + 2, j)     = img.at<uchar> (i + 2, j) + error_diffused * 5.;
+  img.at<uchar> (i + 2, j + 1) = img.at<uchar> (i + 2, j + 1) + error_diffused * 3.;
+  img.at<uchar> (i + 2, j + 2) = img.at<uchar> (i + 2, j + 2) + error_diffused * 1.;
+};
 
 cv::Mat
-dither (cv::Mat& src, const dither_t method) {
+dither (cv::Mat& src, const kernel_t kernel) {
   cv::Mat dithered = src.clone();
 
-  switch (method) {
-  case dither_t::floyd_steinberg:
-    for (int i = 0; i < dithered.rows; ++i) {
-      for (int j = 0; j < dithered.cols; ++j) {
-        auto old_pixel = dithered.at<uchar> (i, j);
-        auto new_pixel = (old_pixel > 128 ? 255 : 0);
-
-        dithered.at<uchar> (i, j) = new_pixel;
-
-        auto error_diffused = (old_pixel - new_pixel) / 16.;
-
-        dithered.at<uchar> (i, j + 1)     = dithered.at<uchar> (i, j + 1) + error_diffused * 7.;
-        dithered.at<uchar> (i + 1, j - 1) = dithered.at<uchar> (i + 1, j - 1) + error_diffused * 3.;
-        dithered.at<uchar> (i + 1, j)     = dithered.at<uchar> (i + 1, j) + error_diffused * 5.;
-        dithered.at<uchar> (i + 1, j + 1) = dithered.at<uchar> (i + 1, j + 1) + error_diffused;
-      }
+  for (int i = 0; i < dithered.rows; ++i) {
+    for (int j = 0; j < dithered.cols; ++j) {
+      auto diff = update_and_diff_closest_palette_color (dithered, i, j);
+      kernel (dithered, i, j, diff);
     }
-
-    break;
-
-  case dither_t::atkinson:
-    for (int i = 0; i < dithered.rows; ++i) {
-      for (int j = 0; j < dithered.cols; ++j) {
-        auto old_pixel = dithered.at<uchar> (i, j);
-        auto new_pixel = (old_pixel > 128 ? 255 : 0);
-
-        dithered.at<uchar> (i, j) = new_pixel;
-
-        auto error_diffused = (old_pixel - new_pixel) / 8.;
-
-        dithered.at<uchar> (i, j + 1) = dithered.at<uchar> (i, j + 1) + error_diffused;
-        dithered.at<uchar> (i, j + 2) = dithered.at<uchar> (i, j + 2) + error_diffused;
-
-        dithered.at<uchar> (i + 1, j - 1) = dithered.at<uchar> (i + 1, j - 1) + error_diffused;
-        dithered.at<uchar> (i + 1, j)     = dithered.at<uchar> (i + 1, j) + error_diffused;
-        dithered.at<uchar> (i + 1, j + 1) = dithered.at<uchar> (i + 1, j + 1) + error_diffused;
-
-        dithered.at<uchar> (i + 2, j) = dithered.at<uchar> (i + 2, j) + error_diffused;
-      }
-    }
-
-    break;
-
-  case dither_t::min_average_error:
-    for (int i = 0; i < dithered.rows; ++i) {
-      for (int j = 0; j < dithered.cols; ++j) {
-        auto old_pixel = dithered.at<uchar> (i, j);
-        auto new_pixel = (old_pixel > 128 ? 255 : 0);
-
-        dithered.at<uchar> (i, j) = new_pixel;
-
-        auto error_diffused = (old_pixel - new_pixel) / 48.;
-
-        dithered.at<uchar> (i, j + 1) = dithered.at<uchar> (i, j + 1) + error_diffused * 7.;
-        dithered.at<uchar> (i, j + 2) = dithered.at<uchar> (i, j + 2) + error_diffused * 5.;
-
-        dithered.at<uchar> (i + 1, j - 2) = dithered.at<uchar> (i + 1, j - 2) + error_diffused * 3.;
-        dithered.at<uchar> (i + 1, j - 1) = dithered.at<uchar> (i + 1, j - 1) + error_diffused * 5.;
-        dithered.at<uchar> (i + 1, j)     = dithered.at<uchar> (i + 1, j) + error_diffused * 7.;
-        dithered.at<uchar> (i + 1, j + 1) = dithered.at<uchar> (i + 1, j + 1) + error_diffused * 5.;
-        dithered.at<uchar> (i + 1, j + 2) = dithered.at<uchar> (i + 1, j + 2) + error_diffused * 3.;
-
-        dithered.at<uchar> (i + 2, j - 2) = dithered.at<uchar> (i + 2, j - 2) + error_diffused * 1.;
-        dithered.at<uchar> (i + 2, j - 1) = dithered.at<uchar> (i + 2, j - 1) + error_diffused * 3.;
-        dithered.at<uchar> (i + 2, j)     = dithered.at<uchar> (i + 2, j) + error_diffused * 5.;
-        dithered.at<uchar> (i + 2, j + 1) = dithered.at<uchar> (i + 2, j + 1) + error_diffused * 3.;
-        dithered.at<uchar> (i + 2, j + 2) = dithered.at<uchar> (i + 2, j + 2) + error_diffused * 1.;
-      }
-    }
-
-    break;
   }
 
   return dithered;
@@ -102,17 +86,17 @@ main (int argc, char* argv[]) {
   namedWindow ("Grayscale Image", cv::WINDOW_AUTOSIZE);
   imshow ("Grayscale Image", gray);
 
-  cv::Mat floyd_steinberg = dither (gray, dither_t::floyd_steinberg);
+  cv::Mat floyd_steinberg = dither (gray, kernel_floyd_steinberg);
   namedWindow ("Floyd-Steinberg Dithered Image", cv::WINDOW_AUTOSIZE);
   imshow ("Floyd-Steinberg Dithered Image", floyd_steinberg);
   cv::imwrite ("floyd-steinberg.jpg", floyd_steinberg);
 
-  cv::Mat atkinson = dither (gray, dither_t::atkinson);
+  cv::Mat atkinson = dither (gray, kernel_atkinson);
   namedWindow ("Atkinson Dithered Image", cv::WINDOW_AUTOSIZE);
   imshow ("Atkinson Dithered Image", atkinson);
   cv::imwrite ("atkinson.jpg", atkinson);
 
-  cv::Mat min_avg_err = dither (gray, dither_t::min_average_error);
+  cv::Mat min_avg_err = dither (gray, kernel_min_average_error);
   namedWindow ("Minimum Average Error Dithered Image", cv::WINDOW_AUTOSIZE);
   imshow ("Minimum Average Error Dithered Image", min_avg_err);
   cv::imwrite ("min_avg_err.jpg", min_avg_err);
