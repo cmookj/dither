@@ -29,6 +29,15 @@ In this variant, only 3/4 of the error is diffused, which leads to a more locali
 dither at the cost of lower performance in almost saturated region.
 This results in increased contrast and may be more desirable visually.
 
+## Minimum Average Error Dithering
+J. F. Jarvis, C. N. Judice, and W. H. Ninke of Bell Labs propose an algorithm 
+which uses a larger kernel to minimize average error.
+```
+[   ...   ...    *   7/48  5/48  ]
+[  3/48  5/48  7/48  5/48  3/48  ]
+[  1/48  3/48  5/48  3/48  1/48  ]
+```
+
 ## Comparison 
 Original image (from Internet):
 
@@ -41,3 +50,7 @@ Floyd-Steinberg dithering:
 Atkinson dithering:
 
 ![](atkinson.jpg)
+
+Minimum average error dithering:
+
+![](min_avg_err.jpg)
